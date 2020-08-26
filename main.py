@@ -216,13 +216,47 @@ class core_gui:
         self.installFrame.text = tk.Entry(self.installFrame, font=("Noto Sans", 10))
         self.installFrame.text.pack(padx=10, pady=5, anchor=tk.SW, fill=tk.X, expand=1)
 
-        self.installFrame.install_button = tk.Button(self.installFrame, font=("Noto Sans", 10), text="Install", command=self.install_plugin)
+        self.installFrame.install_button = tk.Button(self.installFrame, font=("Noto Sans", 10), text="Whitelist", command=self.install_plugin)
         self.installFrame.install_button.pack(padx=10, pady=10, ipadx=5, ipady=5, anchor=tk.SE, side=tk.LEFT, fill=tk.X, expand=1)
         self.installFrame.browse_button = tk.Button(self.installFrame, font=("Noto Sans", 10), text="Browse", command=self.browse_button_action)
         self.installFrame.browse_button.pack(padx=10, pady=10, ipadx=5, ipady=5, anchor=tk.SE, side=tk.LEFT)
 
     def install_plugin(self):
-        print("Installing...")
+        if self.installFrame.text.get():
+            file_path = self.installFrame.text.get()
+            print("Whitelisting from", file_path)
+            t = OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Google\Chrome\ExtensionInstallWhitelist", 0, KEY_ALL_ACCESS)
+            whitelisted = []
+            try:
+                count = 0
+                while 1:
+                    name, value, type = EnumValue(t, count)
+                    whitelisted.append(str(value))
+                    count = count + 1
+            except WindowsError:
+                pass
+        id = get_extension_id(file_path)
+        if id in whitelisted:
+            messagebox.showwarning('Already Whitelisted.', 'This extension ID is already whitelisted. Check to see if you have the correct file and try again.')
+        else:
+            try:
+                SetValueEx(t, str(count + 1), 0, REG_SZ, id)
+            except WindowsError:
+                pass
+            finally:
+                t = OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Google\Chrome\ExtensionInstallWhitelist", 0, KEY_ALL_ACCESS)
+                whitelisted = []
+                try:
+                    count = 0
+                    while 1:
+                        name, value, type = EnumValue(t, count)
+                        whitelisted.append(str(value))
+                        count = count + 1
+                except WindowsError:
+                    pass
+                messagebox.showinfo('Whitelist complete.', 'Program successfully whitelisted the given extension.')
+                self.populate_list(self.console, whitelisted, True)
+        version = get_extension_version(file_path)
 
     def browse_button_action(self):
         filename = filedialog.askopenfilename()
