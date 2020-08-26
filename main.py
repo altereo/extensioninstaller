@@ -7,6 +7,10 @@ import string
 import struct
 import zipfile
 import json
+import getopt
+import tkinter as tk
+import tkinter.filedialog as filedialog
+from tkinter import messagebox
 
 class AdminStateUnknownError(Exception):
     """Cannot determine whether the user is an admin."""
@@ -139,7 +143,7 @@ def extension_install(crx_file, id, version):
             with zipfile.ZipFile(crx_file, 'r') as zip:
                 zip.extractall(extension_path + '\\' + str(version) + '_0')
 
-def main():
+def main_console():
     t = OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Google\Chrome\ExtensionInstallWhitelist", 0, KEY_ALL_ACCESS)
     whitelisted = []
     try:
@@ -168,8 +172,108 @@ def main():
     version = get_extension_version(file_path)
     print("Please install the extension by dragging it on to the extension window on Chrome.")
     #extension_install(file_path, id, version)
-if (is_user_admin() == False):
-    print("Failed to execute script! The requested operation requires elevation.")
-    sys.exit(1)
-else:
-    main()
+
+def main_gui():
+    print("Initiating GUI...")
+    root = tk.Tk()
+    main_window = core_gui(root)
+    root.mainloop()
+
+class core_gui:
+    def __init__(self, master):
+        self.master = master
+        master.title("Chrome Extension Installer")
+
+        self.label = tk.Label(master, text="Currently Installed:", font=("Noto Sans", 16))
+        self.label.pack(pady=5, padx=20, anchor=tk.NW)
+
+        t = OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Google\Chrome\ExtensionInstallWhitelist", 0, KEY_ALL_ACCESS)
+        whitelisted = []
+        try:
+            count = 0
+            while 1:
+                name, value, type = EnumValue(t, count)
+                whitelisted.append(str(value))
+                count = count + 1
+        except WindowsError:
+            pass
+
+        whitelist = ''
+        for index in range(len(whitelisted)):
+            whitelist += str(index + 1) + ':  ' + whitelisted[index]
+            if index != len(whitelisted) - 1:
+                whitelist += '\n'
+
+        self.console = tk.Listbox(master, font=("Noto Sans", 11), width=40, highlightthickness=0)
+        self.console.pack(padx=20, pady=10, anchor=tk.S, fill=tk.BOTH, expand=1)
+        self.console.bind('<Double-Button>', core_gui.on_select)
+        core_gui.populate_list(self.console, whitelisted, True)
+
+        self.installFrame = tk.Frame(master)
+        self.installFrame.pack(padx=0, pady=0, fill=tk.X, expand=1, side=tk.LEFT)
+        self.installFrame.label = tk.Label(self.installFrame, font=("Noto Sans", 10), text="File:")
+        self.installFrame.label.pack(padx=5, pady=0, anchor=tk.SW)
+        self.installFrame.text = tk.Entry(self.installFrame, font=("Noto Sans", 10))
+        self.installFrame.text.pack(padx=10, pady=5, anchor=tk.SW, fill=tk.X, expand=1)
+
+        self.installFrame.install_button = tk.Button(self.installFrame, font=("Noto Sans", 10), text="Install", command=self.install_plugin)
+        self.installFrame.install_button.pack(padx=10, pady=10, ipadx=5, ipady=5, anchor=tk.SE, side=tk.LEFT, fill=tk.X, expand=1)
+        self.installFrame.browse_button = tk.Button(self.installFrame, font=("Noto Sans", 10), text="Browse", command=self.browse_button_action)
+        self.installFrame.browse_button.pack(padx=10, pady=10, ipadx=5, ipady=5, anchor=tk.SE, side=tk.LEFT)
+
+    def install_plugin(self):
+        print("Installing...")
+
+    def browse_button_action(self):
+        filename = filedialog.askopenfilename()
+        if filename.endswith('.crx'):
+            print(repr(filename))
+            core_gui.set_text(self.installFrame.text, filename, True)
+        else:
+            messagebox.showwarning('Failed to install.', 'Please select a \'.crx\' file.')
+
+    def add_to_clipboard(text):
+        r = tk.Tk()
+        r.withdraw()
+        r.clipboard_clear()
+        r.clipboard_append(text)
+        r.update() # now it stays on the clipboard after the window is closed
+        r.destroy()
+
+    def on_select(event):
+        w = event.widget
+        index = int(w.curselection()[0])
+        value = w.get(index)
+        core_gui.add_to_clipboard(value)
+
+    def populate_list(listbox, content, clearfirst):
+        if clearfirst == True:
+            listbox.delete(0, tk.END)
+        for index in range(len(content)):
+            listbox.insert(index + 1, content[index])
+
+    def set_text(textbox, text, clearfirst):
+        if clearfirst == True:
+            textbox.delete(0, tk.END)
+        textbox.insert(tk.END, text)
+
+def parse_arguments(argv):
+    for opt in argv:
+        if opt == '-h':
+            print('Switches:')
+            print('-c: Disables the GUI.')
+            print('-h: Gets help.')
+            sys.exit()
+        elif opt == '-c':
+            main_console()
+
+def initialise():
+    if (is_user_admin() == False):
+        print("Failed to execute script! The requested operation requires elevation.")
+        sys.exit(1)
+    else:
+        if sys.argv[1:]:
+            parse_arguments(sys.argv[1:])
+        else:
+            main_gui()
+initialise()
